@@ -126,7 +126,17 @@ async def process_debt_callback(callback_query: CallbackQuery):
             stream=False  # Можно включить stream для постепенной отправки
         )
 
-        recommendations = "".join(response) if isinstance(response, list) else response
+        # Проверяем формат ответа
+        if isinstance(response, list):  # Ответ в виде списка
+            recommendations = "".join([msg["content"] for msg in response if "content" in msg])
+        elif isinstance(response, dict) and "choices" in response:
+            recommendations = response["choices"][0]["message"]["content"]
+        else:
+            recommendations = str(response)  # На случай неизвестного формата
+
+        # Если рекомендаций нет, отправляем сообщение об этом
+        if not recommendations.strip():
+            recommendations = "К сожалению, не удалось получить рекомендации. Попробуйте позже."
 
         await callback_query.message.answer(
             f"📘 Рекомендации для темы *{theme}* по предмету *{subject}*:\n\n{recommendations}"
@@ -135,6 +145,7 @@ async def process_debt_callback(callback_query: CallbackQuery):
     except Exception as e:
         await callback_query.message.answer("❌ Произошла ошибка при получении рекомендаций. Попробуйте позже.")
         logging.error(f"Ошибка при запросе к g4f: {e}")
+
 
 
 async def get_debts_from_google_sheets(user_name):
