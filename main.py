@@ -7,15 +7,15 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from oauth2client.service_account import ServiceAccountCredentials
-from g4f import Provider, ChatCompletion
+import g4f
 from config_reader import config
 from data.db_session import global_init, create_session
 from data.users import User
 import concurrent.futures
-
+import asyncio
 # Логирование
 logging.basicConfig(level=logging.INFO)
-
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 # Объект бота
 bot = Bot(token=config.bot_token.get_secret_value(), default=DefaultBotProperties(parse_mode='HTML'))
 dp = Dispatcher()
@@ -119,24 +119,12 @@ async def process_debt_callback(callback_query: CallbackQuery):
     prompt = f"Дай подробные рекомендации и советы для изучения темы '{theme}' по предмету '{subject}'. Включи примеры и полезные ресурсы."
 
     try:
-        response = ChatCompletion.create(
-            provider=Provider.ChatGpt,  # Используем ChatGPT
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            stream=False  # Можно включить stream для постепенной отправки
+        response = g4f.ChatCompletion.create(
+            model=g4f.models.gpt_4,
+            messages=[{"role": "user", "content": f"Привет! У меня есть проблемы с предметом {subject}. Мне не очень понятна тема {theme}. Дай пожалуйста пару вариантов, как можно это исправить. 3 Варианта."}],
         )
 
-        # Проверяем формат ответа
-        if isinstance(response, list):  # Ответ в виде списка
-            recommendations = "".join([msg["content"] for msg in response if "content" in msg])
-        elif isinstance(response, dict) and "choices" in response:
-            recommendations = response["choices"][0]["message"]["content"]
-        else:
-            recommendations = str(response)  # На случай неизвестного формата
-
-        # Если рекомендаций нет, отправляем сообщение об этом
-        if not recommendations.strip():
-            recommendations = "К сожалению, не удалось получить рекомендации. Попробуйте позже."
+        recommendations = "".join(response) if isinstance(response, list) else response
 
         await callback_query.message.answer(
             f"📘 Рекомендации для темы *{theme}* по предмету *{subject}*:\n\n{recommendations}"
@@ -147,7 +135,6 @@ async def process_debt_callback(callback_query: CallbackQuery):
         logging.error(f"Ошибка при запросе к g4f: {e}")
 
 
-
 async def get_debts_from_google_sheets(user_name):
     """Асинхронная обертка для получения данных из Google Sheets."""
     loop = asyncio.get_event_loop()
@@ -156,7 +143,6 @@ async def get_debts_from_google_sheets(user_name):
         result = await loop.run_in_executor(pool, fetch_debts, user_name)
 
     return result
-
 
 def fetch_debts(user_name):
     """Получает данные из Google Sheets."""
@@ -185,7 +171,6 @@ def fetch_debts(user_name):
             continue
 
     return results
-
 
 async def main():
     await dp.start_polling(bot)
